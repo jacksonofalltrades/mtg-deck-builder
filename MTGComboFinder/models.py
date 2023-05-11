@@ -40,7 +40,12 @@ class Card(models.Model):
 
 
 class Combo(models.Model):
+    combo_id = models.IntegerField(db_index=True, unique=True)
     card_a = models.ForeignKey(Card, related_name='card_a', on_delete=models.CASCADE)
     card_b = models.ForeignKey(Card, related_name='card_b', on_delete=models.CASCADE)
     card_c = models.ForeignKey(Card, related_name='card_c', on_delete=models.CASCADE, null=True)
     card_d = models.ForeignKey(Card, related_name='card_d', on_delete=models.CASCADE, null=True)
+    combo_card_count = models.IntegerField(db_index=True)
+
+    def __str__(self):
+        return f"{self.card_a}, {self.card_b}, {self.card_c}, {self.card_d}"
