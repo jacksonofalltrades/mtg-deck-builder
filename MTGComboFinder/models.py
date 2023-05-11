@@ -48,4 +48,4 @@ class Combo(models.Model):
     combo_card_count = models.IntegerField(db_index=True)
 
     def __str__(self):
-        return f"{self.card_a}, {self.card_b}, {self.card_c}, {self.card_d}"
+        return f"[{self.card_a}], [{self.card_b}], [{self.card_c}], [{self.card_d}]"
