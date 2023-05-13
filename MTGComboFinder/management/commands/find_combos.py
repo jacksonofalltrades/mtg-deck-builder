@@ -169,14 +169,18 @@ class Command(BaseCommand):
         collect_filtered = {}
 
         # Apply collection overlap filters
+        allowed_percents = ['25%', '50%', '75%', '100%']
         percent_in_coll = options['percent_in_collection']
         if percent_in_coll is not None:
-            print(f"Finding combos having {percent_in_coll} of cards in your collection.")
-            collect_filtered = self.collection_permutation_filter(base_query_dict, percent_in_coll)
-            if self.sum_query_result_counts(collect_filtered) <= 0:
-                print(f"No combos found with card [{card_name}] having "
-                      f"{percent_in_coll} of cards in your collection.")
-                exit(1)
+            if percent_in_coll in allowed_percents:
+                print(f"Finding combos having {percent_in_coll} of cards in your collection.")
+                collect_filtered = self.collection_permutation_filter(base_query_dict, percent_in_coll)
+                if self.sum_query_result_counts(collect_filtered) <= 0:
+                    print(f"No combos found with card [{card_name}] having "
+                          f"{percent_in_coll} of cards in your collection.")
+                    exit(1)
+            else:
+                print(f"Percent can only be one of {', '.join(allowed_percents)}")
         else:
             collect_filtered = base_query_dict
             print("No collection filters included")

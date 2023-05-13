@@ -4,17 +4,29 @@ from django.db import models
 class CardSupertype(models.Model):
     name = models.CharField(max_length=64, db_index=True)
 
+    def __str__(self):
+        return self.name
+
 
 class CardType(models.Model):
     name = models.CharField(max_length=64, db_index=True)
+
+    def __str__(self):
+        return self.name
 
 
 class CardSubtype(models.Model):
     name = models.CharField(max_length=64, db_index=True)
 
+    def __str__(self):
+        return self.name
+
 
 class Keyword(models.Model):
     name = models.CharField(max_length=64, db_index=True)
+
+    def __str__(self):
+        return self.name
 
 
 class Card(models.Model):
