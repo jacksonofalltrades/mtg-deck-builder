@@ -1,4 +1,6 @@
+import operator
 import os
+from functools import reduce
 
 from django.conf import settings
 from pprint import pformat
@@ -74,130 +76,76 @@ class Command(BaseCommand):
 
     @classmethod
     def color_filters(cls, base_query_dict: dict, color_include_str: str, color_exclude_str: str):
-        # str_to_filt_name = {
-        #     'R': 'is_red',
-        #     'G': 'is_green',
-        #     'U': 'is_blue',
-        #     'W': 'is_white',
-        #     'B': 'is_black'
-        # }
-        #
-        # def filt_key(map_key: str) -> bool:
-        #     return str_to_filt_name[map_key]
-        #
-        # def make_color_filter_map(card_count_key: str, color_filt_name: str, filt_val_bool: bool):
-        #     def make_filt_arg_dict(color_filt_name, filt_val_bool):
-        #         return {
-        #             '2': {
-        #                 f"card_a__{color_filt_name}": filt_val_bool,
-        #                 f"card_b__{color_filt_name}": filt_val_bool
-        #             },
-        #             '3': {
-        #                 f"card_a__{color_filt_name}": filt_val_bool,
-        #                 f"card_b__{color_filt_name}": filt_val_bool,
-        #                 f"card_c__{color_filt_name}": filt_val_bool
-        #             },
-        #             '4': {
-        #                 f"card_a__{color_filt_name}": filt_val_bool,
-        #                 f"card_b__{color_filt_name}": filt_val_bool,
-        #                 f"card_c__{color_filt_name}": filt_val_bool,
-        #                 f"card_d__{color_filt_name}": filt_val_bool
-        #             }
-        #         }
-        #     return make_filt_arg_dict(color_filt_name, filt_val_bool)[card_count_key]
-        #
-        #
-        # def make_included_color_filter_list(card_count_key, included_color_list):
-        #     filter_map = {}
-        #     for color_letter in included_color_list:
-        #         filter_map.update(make_color_filter_map(card_count_key,
-        #                                                 filt_key(color_letter),
-        #                                                 True))
-        #     return filter_map
-        #
-        # def make_excluded_color_filter_list(card_count, excluded_color_list):
-        #     pass
-        #
-        # def make_full_color_filter_list(card_count, included_color_list, excluded_color_list):
-        #     full_list = []
-        #     full_list.extend(make_included_color_filter_list(card_count, included_color_list))
-        #     full_list.extend(make_excluded_color_filter_list(card_count, excluded_color_list))
-        #     return full_list
-        #
-        # return dict(map(lambda x:
-        #                     (x, base_query_dict[x].filter(*make_full_color_filter_list(
-        #                         x, color_include_str, color_exclude_str
-        #                     )),
-        #                     base_query_dict.keys())))
+        card_count_card_col_map = {
+            '2': ['card_a', 'card_b'],
+            '3': ['card_a', 'card_b', 'card_c'],
+            '4': ['card_a', 'card_b', 'card_c', 'card_d']
+        }
 
+        str_to_filt_name = {
+            'R': 'is_red',
+            'G': 'is_green',
+            'U': 'is_blue',
+            'W': 'is_white',
+            'B': 'is_black'
+        }
 
+        def filt_key(map_key: str) -> bool:
+            return str_to_filt_name[map_key]
 
-        """
-        make_included_color_filter_list(card_count, included_color_list):
-            pass
+        def make_color_filter_map(card_count_key: str, filter_key_list_iter: iter, filt_val_bool: bool):
+            def make_ored_color_filter_list():
+                card_col_name_list = card_count_card_col_map[card_count_key]
 
-        make_excluded_color_filter_list(card_count, excluded_color_list):
-            pass
+                return map(lambda x: reduce(operator.or_,
+                                            map(lambda y: Q(**{f"{x}__{y}": filt_val_bool}),
+                                                filter_key_list_iter)),
+                           card_col_name_list)
+            return reduce(operator.and_, make_ored_color_filter_list())
 
-        make_full_color_filter_list(card_count, included_color_list, excluded_color_list)
-            pass
+        def make_included_color_filter_list(card_count_key, included_color_list):
+            if included_color_list is not None and len(included_color_list) > 0:
+                filter_key_list_iter = list(map(filt_key, included_color_list))
+                return make_color_filter_map(card_count_key, filter_key_list_iter, True)
+            else:
+                return []
+
+        def make_excluded_color_filter_list(card_count_key, excluded_color_list):
+            if excluded_color_list is not None and len(excluded_color_list) > 0:
+                filter_key_list_iter = list(map(filt_key, excluded_color_list))
+                return make_color_filter_map(card_count_key, filter_key_list_iter, False)
+            else:
+                return []
+
+        def make_full_color_filter_list(card_count, included_color_list, excluded_color_list):
+            full_list = []
+            inc = make_included_color_filter_list(card_count, included_color_list)
+            exc = make_excluded_color_filter_list(card_count, excluded_color_list)
+            if len(inc) > 0:
+                full_list.append(inc)
+            if len(exc) > 0:
+                full_list.append(exc)
+            return full_list
+
+        z = make_full_color_filter_list('2', color_include_str, color_exclude_str)
+        print(z)
 
         return dict(map(lambda x:
-                            (x, base_query_dict[x].filter(*make_full_color_filter_list()),
-                            base_query_dict.keys()))
-
-        Final filter looks like this, e.g. for 4 card combo and RG included and UW excluded:
-        filter(
-            Q(card_a__is_red=True)|Q(card_a__is_green=True),
-            Q(card_b__is_red=True)|Q(card_b__is_green=True),
-            Q(card_c__is_red=True)|Q(card_c__is_green=True),
-            Q(card_d__is_red=True)|Q(card_d__is_green=True),
-            Q(card_a__is_blue=False)|Q(card_a__is_white=False),
-            Q(card_b__is_blue=False)|Q(card_b__is_white=False),
-            Q(card_c__is_blue=False)|Q(card_c__is_white=False),
-            Q(card_d__is_blue=False)|Q(card_d__is_white=False),
-        """
-
-        #     color_filter_map = dict(
-        #         map(lambda x: (x, Q(**make_filt_arg_dict(filt_key(x), filt_val(x)))), [
-        #             'R:i', 'G:i', 'U:i', 'B:i', 'W:i',
-        #             'R:e', 'G:e', 'U:e', 'B:e', 'W:e',
-        #         ])
-        #     )
-        #
-        # def make_color_map_keys(user_color_str: str, inc_ex_key: str):
-        #     return list(map(lambda x: f"{x}:{inc_ex_key}", user_color_str))
-        #
-        # if color_include_str:
-        #     color_incl_map_keys = make_color_map_keys(color_include_str, 'i')
-        # else:
-        #     color_incl_map_keys = []
-        #
-        # if color_exclude_str:
-        #     color_ex_map_keys = make_color_map_keys(color_exclude_str, 'e')
-        # else:
-        #     color_ex_map_keys = []
-        #
-        # all_keys = color_incl_map_keys + color_ex_map_keys
-        # final_filter_list = []
-        # for color_key in all_keys:
-        #     final_filter_list.append(color_filter_map[color_key])
-        #
-        # if len(final_filter_list) > 0:
-        #     return dict(map(lambda x:
-        #                     (x, base_query_dict[x].filter(*final_filter_list)),
-        #                     base_query_dict.keys()))
-        # else:
-        #     print(f"No color filters included")
-        #     return base_query_dict
-        print(f"Color filters not yet implemented, ignoring")
-        return base_query_dict
+                        (x,
+                         base_query_dict[x].filter(
+                             *make_full_color_filter_list(
+                                 x, color_include_str, color_exclude_str
+                             )
+                         )
+                         ),
+                         base_query_dict.keys()))
 
     @classmethod
     def sum_query_result_counts(cls, query_dict: dict) -> int:
         return sum(map(lambda x: query_dict[x].count(), query_dict.keys()))
 
     def handle(self, *args, **options):
+        print(options)
         combos_2card_query = Combo.objects.filter(
             combo_card_count=2)
         combos_3card_query = Combo.objects.filter(
