@@ -35,6 +35,14 @@ If none of the following are specified, all card types are included in results
 * `--include-planeswalker-removal`
 * `--include-artifact-removal`
 
+If neither of the following is specified, both targeted and non-targeted will be included in results
+* `--include-targeted` - "Destroy all non-land permanents"
+* `--include-non-targeted` - "Destroy target creature"
+
+If neither of the following is specified, both "destroy" and "exile" will be included in results
+* `--include-exile`
+* `--include-destroy`
+
 #### Affinity types
 At the top level you can break down types of play into format and metagame, but I wanted something a little bit more specific, so I'm calling it Affinity Type, here. So what is an Affinity Type? Here are some examples:
 * Tribal
@@ -56,15 +64,6 @@ So part of your deck-building strategy would work as follows:
 3. Search for cards in your collection for the specified Affinity Type
 4. If it looks like there are enough, use that as your deck's starting point
 5. Next, choose your meta, and MTGComboFinder
-
-If neither of the following is specified, both targeted and non-targeted will be included in results
-* `--include-targeted` - "Destroy all non-land permanents"
-* `--include-non-targeted` - "Destroy target creature"
-
-If neither of the following is specified, both "destroy" and "exile" will be included in results
-* `--include-exile`
-* `--include-destroy`
-
 
 ## Future improvements
 * (high priority) Support registering cards from your physical collection. Currently only store for Arena.
