@@ -29,6 +29,10 @@ class Keyword(models.Model):
         return self.name
 
 
+class CardTag(models.Model):
+    tag = models.CharField(max_length=32)
+
+
 class Card(models.Model):
     is_red = models.BooleanField(db_index=True)
     is_green = models.BooleanField(db_index=True)
@@ -46,6 +50,7 @@ class Card(models.Model):
     types = models.ManyToManyField(CardType)
     subtypes = models.ManyToManyField(CardSubtype)
     rules_text = models.TextField(db_index=True)
+    tags = models.ManyToManyField(CardTag)
 
     def __str__(self):
         return self.name
@@ -61,3 +66,6 @@ class Combo(models.Model):
 
     def __str__(self):
         return f"[{self.card_a}], [{self.card_b}], [{self.card_c}], [{self.card_d}]"
+
+
+

@@ -20,7 +20,7 @@ To search for combos, you need at least one card you want to find combos for, an
 All of the following search types can be filtered further by the filters noted above for combos.
 
 ##### Card draw
-Search for spells that draw cards
+Search for spells that draw cards.
 
 ##### Ramp
 Search for spells that generate mana.
@@ -63,7 +63,7 @@ So part of your deck-building strategy would work as follows:
 2. Choose your colors (some may work better than others for a given Affinity Type)
 3. Search for cards in your collection for the specified Affinity Type
 4. If it looks like there are enough, use that as your deck's starting point
-5. Next, choose your meta, and MTGComboFinder
+5. Next, choose your meta, and MTGComboFinder will weight the card types for your deck.
 
 ## Future improvements
 * (high priority) Support registering cards from your physical collection. Currently only store for Arena.

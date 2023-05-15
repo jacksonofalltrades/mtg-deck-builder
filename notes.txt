@@ -107,3 +107,22 @@ x = \
  'type': 'Legendary Creature — Orc Warrior',
  'types': ['Creature']}
 ```
+
+Query filters
+Card Draw filtering
+Card.objects.filter(rules_text__contains="Draw a card", converted_mana_cost__lte=0).exclude(types__name__in=["Land", "Plane", "Dungeon", "Vanguard
+", "Conspiracy", "Stickers", "Scheme"]).exclude(keywords__name__in=["Splice"]).exclude(subtypes__name__in=["Contraption", "Attraction"])
+rules_text="draw(s) a card"
+rules_text="draw(s) X cards"
+rules_text="draw(s) two cards"
+rules_text="draw(s) three cards"
+...
+
+How to filter on "must have specific set of <m2m>" e.g., must include all of the keywords in this list.
+Card.objects.filter(keywords__name__in=['Protection']).filter(keywords__name__in=['Flying']).filter(keywords__name__in=['Enchant']).filter(keyword
+s__name__in=['Lifelink'])
+
+Scryfall API:
+curl https://api.scryfall.com/cards/named?exact=<card name>
+image_uris['normal']
+
