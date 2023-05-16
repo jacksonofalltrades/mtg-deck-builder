@@ -50,6 +50,8 @@ class Card(models.Model):
     types = models.ManyToManyField(CardType)
     subtypes = models.ManyToManyField(CardSubtype)
     rules_text = models.TextField(db_index=True)
+    front_image_uri = models.URLField(null=True)
+    back_image_uri = models.URLField(null=True)
     tags = models.ManyToManyField(CardTag)
 
     def __str__(self):

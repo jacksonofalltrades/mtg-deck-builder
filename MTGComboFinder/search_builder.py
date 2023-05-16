@@ -1,80 +1,68 @@
-import os
-import urllib.parse
-import hashlib
 import logging
-import requests
-from django.conf import settings
-from django.db.models import QuerySet
-from MTGComboFinder.models import *
+from functools import reduce
+from operator import or_, and_
+
+from django.db.models import Q
 
 logger = logging.getLogger(__name__)
 
 
-class SearchBuilder:
+class CardSearchBuilder:
     def __init__(self):
-        self.scryfall_card_search_api_url = "https://api.scryfall.com/cards/named?exact="
-        self.results_cache = set([]) # Cache based on sorted db ids of cards
-        self.result_page_root = "/tmp/mtg_search_results"
-        if not os.path.exists(self.result_page_root):
-            os.makedirs(self.result_page_root)
+        self.red = Q(is_red=True)
+        self.red_df = {"is_red": True}
 
-    def build_html_result_item(self, card: Card) -> str:
-        safe_string = urllib.parse.quote_plus(card.name)
-        r = requests.get(f"{self.scryfall_card_search_api_url}{safe_string}")
-        if r.status_code == 200:
-            data = r.json()
-            if 'object' in data:
-                if 'card_faces' in data and len(data['card_faces']) > 1:
-                    image_uri1 = data['card_faces'][0]['image_uris']['normal']
-                    image_uri2 = data['card_faces'][1]['image_uris']['normal']
-                    return f"    <div class=\"grid-item\"><img src=\"{image_uri1}\" /><img src=\"{image_uri2}\" /></div>"
-                else:
-                    image_uri = data['image_uris']['normal']
-                return f"    <div class=\"grid-item\"><img src=\"{image_uri}\" /></div>"
-        return None
+        self.green = Q(is_green=True)
+        self.green_df = {"is_green": True}
 
-    def make_cache_key(self, cards: QuerySet) -> str:
-        hash_key = ":".join(map(lambda x: str(x.pk), cards.order_by('pk')))
-        m = hashlib.md5()
-        m.update(hash_key.encode('utf-8'))
-        cache_key = m.hexdigest()
+        self.blue = Q(is_blue=True)
+        self.blue_df = {"is_blue": True}
 
-        return cache_key
+        self.black = Q(is_black=True)
+        self.black_df = {"is_black": True}
 
-    def get_result_page(self, cache_key: str) -> str:
-        cached_page = f"{cache_key}.html"
-        return os.path.join(self.result_page_root, cached_page)
+        self.white = Q(is_white=True)
+        self.white_df = {"is_white": True}
 
-    def build_results_page(self, cards: QuerySet) -> str:
-        """
-        :param cards: cards to build result page for
-        :return: path to results page
-        """
-        cache_key = self.make_cache_key(cards)
-        results_page = self.get_result_page(cache_key)
-        if cache_key in self.results_cache:
-            return results_page
+    def owned(self, as_dict=False):
+        if as_dict:
+            return {"count_in_arena_collection__gte": 1}
+        return Q(count_in_arena_collection__gte=1)
 
-        all_items = []
-        for card in cards:
-            item = self.build_html_result_item(card)
-            if item is not None:
-                all_items.append(item)
-            else:
-                logger.warning(f"Problem fetching image uri for card named={card.name}")
+    def xr(self):
+        return self.red & ~(self.green & self.blue & self.black & self.white)
 
-        page_temp = os.path.join(settings.BASE_DIR, "templates", "results_page_template.html")
-        page_contents = ""
-        with open(page_temp, 'r') as f:
-            page_contents = f.read()
+    def xg(self):
+        return self.green & ~(self.red & self.blue & self.black & self.white)
 
-        page_filled = page_contents % "\n".join(all_items)
-        with open(results_page, 'w') as f:
-            f.write(page_filled)
+    def xu(self):
+        return self.blue & ~(self.red & self.green & self.black & self.white)
 
-        self.results_cache.add(cache_key)
+    def xw(self):
+        return self.white & ~(self.red & self.green & self.black & self.blue)
 
-        return results_page
+    def xb(self):
+        return self.black & ~(self.red & self.green & self.white & self.blue)
+
+    def text_re(self, regex: str):
+        return Q(rules_text__regex=regex)
 
 
+class ComboSearchBuilder(CardSearchBuilder):
+    def __init__(self):
+        super().__init__()
+        self.card_refs = ['card_a__', 'card_b__', 'card_c__', 'card_d__']
 
+    def any_card(self, filter_dict: dict):
+        return reduce(or_, map(lambda x: Q(**dict(map(lambda y, z: (f"{x}{y}", z), filter_dict.items()))),
+                               self.card_refs))
+
+    def all_cards(self, filter_dict: dict):
+        return reduce(and_, map(lambda x: Q(**dict(map(lambda y, z: (f"{x}{y}", z), filter_dict.items()))),
+                                self.card_refs))
+
+    def one_filt(self, filt_key: str, filt_val: any):
+        return {filt_key: filt_val}
+
+    def uses(self, card_name: str):
+        return self.any_card(self.one_filt("name", card_name))
