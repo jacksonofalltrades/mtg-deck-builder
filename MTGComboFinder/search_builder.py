@@ -2,6 +2,7 @@ import logging
 import operator
 from functools import reduce
 from operator import or_, and_
+from typing import List
 
 from django.db.models import Q, QuerySet, Count, F
 from django.db.models.functions import Length
@@ -23,23 +24,41 @@ class CardSearchBuilder:
         self.black = Q(is_black=True)
         self.white = Q(is_white=True)
 
+        self.all_color_set = set([self.red, self.green, self.blue, self.black, self.white])
+
+        self.color_map = {
+            'R': self.red,
+            'G': self.green,
+            'U': self.blue,
+            'B': self.black,
+            'W': self.white
+        }
+
     def owned(self):
         return Q(count_in_arena_collection__gte=1)
 
+    def any_of_colors(self, color_list: List[str]):
+        color_subset = set(map(lambda x: self.color_map[x], color_list))
+        exclude_colors = self.all_color_set - color_subset
+        return operator.and_(
+            reduce(operator.or_, color_subset),
+            ~reduce(operator.or_, exclude_colors)
+        )
+
     def xr(self):
-        return self.red & ~(self.green & self.blue & self.black & self.white)
+        return self.any_of_colors(['R'])
 
     def xg(self):
-        return self.green & ~(self.red & self.blue & self.black & self.white)
+        return self.any_of_colors(['G'])
 
     def xu(self):
-        return self.blue & ~(self.red & self.green & self.black & self.white)
+        return self.any_of_colors(['U'])
 
     def xw(self):
-        return self.white & ~(self.red & self.green & self.black & self.blue)
+        return self.any_of_colors(['W'])
 
     def xb(self):
-        return self.black & ~(self.red & self.green & self.white & self.blue)
+        return self.any_of_colors(['B'])
 
     def rm_chaff(self):
         """
@@ -53,17 +72,23 @@ class CardSearchBuilder:
             ~Q(supertypes__name__in=['Ongoing'])
         )
 
+    def base_collection_filter(self, color_list: List[str]):
+        return self.rm_chaff() & self.owned() & self.any_of_colors(color_list)
+
     def text_re(self, regex: str):
         return Q(rules_text__regex=regex)
 
     def removal(self):
-        return operator.or_(
-            Q(rules_text__contains="\nDestroy"),
-            Q(rules_text__contains="\nExile"),
-            Q(rules_text__contains="destroy target"),
-            Q(rules_text__contains="exile target"),
-            Q(rules_text__contains="destroy all"),
-            Q(rules_text__contains="exile all")
+        return reduce(
+            operator.or_,
+            [
+                Q(rules_text__contains="\nDestroy"),
+                Q(rules_text__contains="\nExile"),
+                Q(rules_text__contains="destroy target"),
+                Q(rules_text__contains="exile target"),
+                Q(rules_text__contains="destroy all"),
+                Q(rules_text__contains="exile all")
+            ]
         )
 
     def card_draw(self):
@@ -72,13 +97,20 @@ class CardSearchBuilder:
                 Q(rules_text__contains="\nDraw"),
                 Q(rules_text__icontains="draws")
             ),
-            ~Q(rules_text__icontains="controller draws"))
+            ~operator.or_(
+                Q(rules_text__icontains="controller draws"),
+                Q(rules_text__icontains="opponent draws")
+            )
+        )
 
     def ramp(self):
-        return operator.or_(
-            Q(rules_text__contains="Add"),
-            Q(rules_text__iregex=r"create\s.+treasure token"),
-            Q(rules_text__iregex=r"search\s.+\sfor\s.+land"),
+        return operator.and_(
+            reduce(operator.or_, [
+                Q(rules_text__contains="Add "),
+                Q(rules_text__iregex=r"create\s.+treasure token"),
+                Q(rules_text__iregex=r"search\s.+\sfor\s.+land"),
+            ]),
+            ~Q(types__name__in=['Land'])
         )
 
     def apply_card_tags(self, base_query: QuerySet) -> None:
@@ -138,18 +170,36 @@ class CardSearchBuilder:
         """
         return base_query.annotate(
             card_weight=(
-                    Count('tags', filter=Q(tags__name='Draw')) +
-                    Count('tags', filter=Q(tags__name='Removal')) +
-                    Count('tags', filter=Q(tags__name='Ramp')) +
+                    Count('tags', filter=Q(tags__tag='Draw')) +
+                    Count('tags', filter=Q(tags__tag='Removal')) +
+                    Count('tags', filter=Q(tags__tag='Ramp')) +
                     3 - F('converted_mana_cost') +
                     Count('keywords') +
                     ((Length('rules_text') - 5) / 5 * 0.2)
             )
         )
 
+    def deck_building_helper(self, deck_colors=List[str]) -> dict:
+        """
+        Generate a report of best options for various types of cards for a specific deck
+        :param deck_colors:
+        :return:
+        """
+        base_query = Card.objects.filter(self.base_collection_filter(deck_colors))
+        ramp_q = self.calculate_card_quality_weight(base_query.filter(tags__tag='Ramp'))
+        ramp_card_list = ramp_q.order_by('-card_weight')
 
+        removal_q = self.calculate_card_quality_weight(base_query.filter(tags__tag='Removal'))
+        removal_card_list = removal_q.order_by('-card_weight')
 
+        draw_q = self.calculate_card_quality_weight(base_query.filter(tags__tag='Draw'))
+        draw_card_list = draw_q.order_by('-card_weight')
 
+        return {
+            "ramp": ramp_card_list,
+            "removal": removal_card_list,
+            "draw": draw_card_list
+        }
 
 
 class ComboSearchBuilder(CardSearchBuilder):

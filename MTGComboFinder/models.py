@@ -73,4 +73,26 @@ class Combo(models.Model):
         return f"[{self.card_a}], [{self.card_b}], [{self.card_c}], [{self.card_d}]"
 
 
+class Deck(models.Model):
+    name = models.CharField(max_length=64, db_index=True)
+    is_red = models.BooleanField(db_index=True)
+    is_green = models.BooleanField(db_index=True)
+    is_blue = models.BooleanField(db_index=True)
+    is_white = models.BooleanField(db_index=True)
+    is_black = models.BooleanField(db_index=True)
+
+    def __str__(self):
+        deck_list = list(map(lambda x: f"{x.quantity} {x.card.name}", DeckEntry.objects.filter(deck=self)))
+        deck_list_str = "\n".join(deck_list)
+        return f"{self.name}\n{deck_list_str}"
+
+
+class DeckEntry(models.Model):
+    deck = models.ForeignKey(Deck, on_delete=models.CASCADE)
+    card = models.ForeignKey(Card, related_name='deck_card', on_delete=models.CASCADE)
+    quantity = models.IntegerField()
+
+    def __str__(self):
+        return f"{self.quantity} {self.card.name}"
+
 
