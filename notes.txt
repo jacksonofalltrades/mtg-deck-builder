@@ -126,3 +126,30 @@ Scryfall API:
 curl https://api.scryfall.com/cards/named?exact=<card name>
 image_uris['normal']
 
+Tags:
+* Draw
+* Ramp
+* Removal
+    * Removal-Creature
+    * Removal-Artifact
+    * Removal-Enchantment
+    * Removal-Planeswalker
+    * Removal-Land
+    * Removal-Counterspell
+    * Removal-Return
+* Draw-Trigger (card has an effect triggered by drawing)
+    * Draw-Self-Trigger
+    * Draw-Other-Trigger
+    * Draw-Any-Trigger
+* ETB-Trigger (card has an effect when it or some other card enters the battlefield)
+    * ETB-Self-Trigger
+    * ETB-Other-Trigger
+    * ETB-Any-Trigger
+
+* Die-Trigger
+* LTB-Trigger (card has an effect when it or some other card leaves the battlefield)
+    * LTB-Self-Trigger
+    * LTB-Other-Trigger
+    * LTB-Any-Trigger
+* Cast-Trigger
+

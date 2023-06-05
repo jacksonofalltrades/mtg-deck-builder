@@ -32,6 +32,9 @@ class Keyword(models.Model):
 class CardTag(models.Model):
     tag = models.CharField(max_length=32)
 
+    def __str__(self):
+        return self.tag
+
 
 class Card(models.Model):
     is_red = models.BooleanField(db_index=True)
@@ -41,18 +44,18 @@ class Card(models.Model):
     is_black = models.BooleanField(db_index=True)
     count_in_arena_collection = models.IntegerField(db_index=True)
     converted_mana_cost = models.IntegerField()
-    keywords = models.ManyToManyField(Keyword)
+    keywords = models.ManyToManyField(Keyword, related_name="card_keyword")
     name = models.CharField(max_length=64, db_index=True, unique=True)
     power = models.CharField(max_length=3, db_index=True)
     toughness = models.CharField(max_length=3, db_index=True)
     full_type_name = models.CharField(max_length=64)
-    supertypes = models.ManyToManyField(CardSupertype)
-    types = models.ManyToManyField(CardType)
-    subtypes = models.ManyToManyField(CardSubtype)
+    supertypes = models.ManyToManyField(CardSupertype, related_name="card_supertype")
+    types = models.ManyToManyField(CardType, related_name='card_type')
+    subtypes = models.ManyToManyField(CardSubtype, related_name='card_subtype')
     rules_text = models.TextField(db_index=True)
     front_image_uri = models.URLField(null=True)
     back_image_uri = models.URLField(null=True)
-    tags = models.ManyToManyField(CardTag)
+    tags = models.ManyToManyField(CardTag, related_name='card_tag')
 
     def __str__(self):
         return self.name
