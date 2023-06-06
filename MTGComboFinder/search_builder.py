@@ -2,7 +2,7 @@ import logging
 import operator
 from functools import reduce
 from operator import or_, and_
-from typing import List
+from typing import List, Set
 
 from django.db.models import Q, QuerySet, Count, F
 from django.db.models.functions import Length
@@ -37,13 +37,24 @@ class CardSearchBuilder:
     def owned(self):
         return Q(count_in_arena_collection__gte=1)
 
-    def any_of_colors(self, color_list: List[str]):
-        color_subset = set(map(lambda x: self.color_map[x], color_list))
+    def any_of_colors(self, color_list: Set[str]):
+        color_set = set(color_list)
+        if not color_set.issubset(set(self.color_map.keys())):
+            raise Exception(f"Colors must be a subset of {self.color_map.keys()}")
+
+        color_subset = set(map(lambda x: self.color_map[x], color_set))
         exclude_colors = self.all_color_set - color_subset
-        return operator.and_(
-            reduce(operator.or_, color_subset),
-            ~reduce(operator.or_, exclude_colors)
-        )
+        if color_subset:
+            if exclude_colors:
+                return operator.and_(
+                    reduce(operator.or_, color_subset),
+                    ~reduce(operator.or_, exclude_colors)
+                )
+            else:
+                return reduce(operator.or_, color_subset)
+        else:
+            if exclude_colors:
+                return ~reduce(operator.or_, exclude_colors)
 
     def xr(self):
         return self.any_of_colors(['R'])
@@ -174,8 +185,9 @@ class CardSearchBuilder:
                     Count('tags', filter=Q(tags__tag='Removal')) +
                     Count('tags', filter=Q(tags__tag='Ramp')) +
                     3 - F('converted_mana_cost') +
-                    Count('keywords') +
-                    ((Length('rules_text') - 5) / 5 * 0.2)
+                    Count('keywords')
+                    # +
+                    # ((Length('rules_text') - 5) / 5 * 0.2)
             )
         )
 
