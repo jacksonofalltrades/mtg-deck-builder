@@ -1,11 +1,14 @@
 import logging
 import operator
+import os
 from functools import reduce
 from operator import or_, and_
-from typing import List, Set
+from typing import List
 
+import lrparsing
+from django.conf import settings
 from django.db.models import Q, QuerySet, Count, F
-from django.db.models.functions import Length
+# from django.db.models.functions import Length
 
 from MTGComboFinder.models import Card, CardTag
 
@@ -13,6 +16,20 @@ logger = logging.getLogger(__name__)
 
 
 class CardSearchBuilder:
+    """
+    Search on specific deck archteypes:
+    * Enter the battlefield (cards with etb triggers + cards that cause cards to leave/return to battlefield)
+        Card.objects.filter(rules_text__regex=r"When.+\senters the battlefield")
+    * Life gain (cards that cause life gain + cards that have life gain triggers)
+    * Making creature tokens (and findings ways to multiply them fast or grant bonuses to "all creatures you control")
+    * Tribal (creatures that share a type + cards that give bonuses to those creature types)
+    * Changeling tribal (changeling creatures + cards that give bonuses only to many different specific creature types)
+    * Counters (cards that add counters to creatures + creatures + cards that have "add a counter" triggers)
+    * Persistent creature buffs
+        Card.objects.filter(types__name__in=["Enchantment", "Creature", "Artifact"],
+            rules_text__icontains="creatures you control get")
+
+    """
     TAG_DRAW = 'Draw'
     TAG_REMOVAL = 'Removal'
     TAG_RAMP = 'Ramp'
@@ -24,7 +41,7 @@ class CardSearchBuilder:
         self.black = Q(is_black=True)
         self.white = Q(is_white=True)
 
-        self.all_color_set = set([self.red, self.green, self.blue, self.black, self.white])
+        self.all_color_set = {self.red, self.green, self.blue, self.black, self.white}
 
         self.color_map = {
             'R': self.red,
@@ -37,7 +54,7 @@ class CardSearchBuilder:
     def owned(self):
         return Q(count_in_arena_collection__gte=1)
 
-    def any_of_colors(self, color_list: Set[str]):
+    def any_of_colors(self, color_list: List[str]):
         color_set = set(color_list)
         if not color_set.issubset(set(self.color_map.keys())):
             raise Exception(f"Colors must be a subset of {self.color_map.keys()}")
@@ -213,6 +230,48 @@ class CardSearchBuilder:
             "draw": draw_card_list
         }
 
+    def get_deck_query(self, deck_export_name: str) -> QuerySet:
+        card_name_list = []
+        deck_path = os.path.join(settings.BASE_DIR, "MTGComboFinder", "data", "deck_exports", deck_export_name)
+        line_pat = r'^(\d+)\s([^(]+)\s.+'
+        with open(deck_path, 'r') as f:
+            for line in f:
+                pass
+
+        return Card.objects.filter(name__in=card_name_list)
+
+    def eval_expr(self, parse_entity, parse_val):
+        if isinstance(parse_entity, lrparsing.Rule):
+            return self.eval_expr(parse_val[0], parse_val[1])
+
+        """
+         (expr = (Prioritised(atom), Prioritised(Choice('~') >> expr), Prioritised(expr << ('&' | '|') << expr)),
+          (expr = (Prioritised(atom), Prioritised(Choice('~') >> expr), Prioritised(expr << ('&' | '|') << expr)),
+           (expr = (Prioritised(atom), Prioritised(Choice('~') >> expr), Prioritised(expr << ('&' | '|') << expr)),
+            (atom = T.ident=/[A-Za-z_][A-Za-z_0-9]*:/ + T.field_val=/[^:()|&~]+|"[^"]+"/ | '(' + expr + ')',
+             (T.ident=/[A-Za-z_][A-Za-z_0-9]*:/, 'z:', 0, 1, 1),
+             (T.field_val=/[^:()|&~]+|"[^"]+"/, 'legendary', 2, 1, 3))),
+           ('&', '&', 11, 1, 12),
+           (expr = (Prioritised(atom), Prioritised(Choice('~') >> expr), Prioritised(expr << ('&' | '|') << expr)),
+            (atom = T.ident=/[A-Za-z_][A-Za-z_0-9]*:/ + T.field_val=/[^:()|&~]+|"[^"]+"/ | '(' + expr + ')',
+             (T.ident=/[A-Za-z_][A-Za-z_0-9]*:/, 's:', 12, 1, 13),
+             (T.field_val=/[^:()|&~]+|"[^"]+"/, 'rat', 14, 1, 15)))),
+          ('|', '|', 17, 1, 18),
+          (expr = (Prioritised(atom), Prioritised(Choice('~') >> expr), Prioritised(expr << ('&' | '|') << expr)),
+           (atom = T.ident=/[A-Za-z_][A-Za-z_0-9]*:/ + T.field_val=/[^:()|&~]+|"[^"]+"/ | '(' + expr + ')',
+            (T.ident=/[A-Za-z_][A-Za-z_0-9]*:/, 'r:', 18, 1, 19),
+            (T.field_val=/[^:()|&~]+|"[^"]+"/, '"+1/+1 counter"', 20, 1, 21)))))
+
+
+        :return:
+        """
+
+        pass
+
+    def build_filter_from_parse_tree(self, parse_tree: tuple):
+        return self.eval_expr(parse_tree)
+
+
 
 class ComboSearchBuilder(CardSearchBuilder):
     def __init__(self):
@@ -233,67 +292,67 @@ class ComboSearchBuilder(CardSearchBuilder):
     def uses(self, card_name: str):
         return self.any_card(self.one_filt("name", card_name))
 
-    def color_filters(self, color_include_str: str, color_exclude_str: str):
-        card_count_card_col_map = {
-            '2': ['card_a', 'card_b'],
-            '3': ['card_a', 'card_b', 'card_c'],
-            '4': ['card_a', 'card_b', 'card_c', 'card_d']
-        }
-
-        str_to_filt_name = {
-            'R': 'is_red',
-            'G': 'is_green',
-            'U': 'is_blue',
-            'W': 'is_white',
-            'B': 'is_black'
-        }
-
-        def filt_key(map_key: str) -> bool:
-            return str_to_filt_name[map_key]
-
-        def make_color_filter_map(card_count_key: str, filter_key_list_iter: iter, filt_val_bool: bool):
-            def make_ored_color_filter_list():
-                card_col_name_list = card_count_card_col_map[card_count_key]
-
-                return map(lambda x: reduce(operator.or_,
-                                            map(lambda y: Q(**{f"{x}__{y}": filt_val_bool}),
-                                                filter_key_list_iter)),
-                           card_col_name_list)
-            return reduce(operator.and_, make_ored_color_filter_list())
-
-        def make_included_color_filter_list(card_count_key, included_color_list):
-            if included_color_list is not None and len(included_color_list) > 0:
-                filter_key_list_iter = list(map(filt_key, included_color_list))
-                return make_color_filter_map(card_count_key, filter_key_list_iter, True)
-            else:
-                return []
-
-        def make_excluded_color_filter_list(card_count_key, excluded_color_list):
-            if excluded_color_list is not None and len(excluded_color_list) > 0:
-                filter_key_list_iter = list(map(filt_key, excluded_color_list))
-                return make_color_filter_map(card_count_key, filter_key_list_iter, False)
-            else:
-                return []
-
-        def make_full_color_filter_list(card_count, included_color_list, excluded_color_list):
-            full_list = []
-            inc = make_included_color_filter_list(card_count, included_color_list)
-            exc = make_excluded_color_filter_list(card_count, excluded_color_list)
-            if len(inc) > 0:
-                full_list.append(inc)
-            if len(exc) > 0:
-                full_list.append(exc)
-            return full_list
-
-        z = make_full_color_filter_list('2', color_include_str, color_exclude_str)
-        print(z)
-
-        return dict(map(lambda x:
-                        (x,
-                         base_query_dict[x].filter(
-                             *make_full_color_filter_list(
-                                 x, color_include_str, color_exclude_str
-                             )
-                         )
-                         ),
-                         base_query_dict.keys()))
+    # def color_filters(self, color_include_str: str, color_exclude_str: str):
+    #     card_count_card_col_map = {
+    #         '2': ['card_a', 'card_b'],
+    #         '3': ['card_a', 'card_b', 'card_c'],
+    #         '4': ['card_a', 'card_b', 'card_c', 'card_d']
+    #     }
+    #
+    #     str_to_filt_name = {
+    #         'R': 'is_red',
+    #         'G': 'is_green',
+    #         'U': 'is_blue',
+    #         'W': 'is_white',
+    #         'B': 'is_black'
+    #     }
+    #
+    #     def filt_key(map_key: str) -> bool:
+    #         return str_to_filt_name[map_key]
+    #
+    #     def make_color_filter_map(card_count_key: str, filter_key_list_iter: iter, filt_val_bool: bool):
+    #         def make_ored_color_filter_list():
+    #             card_col_name_list = card_count_card_col_map[card_count_key]
+    #
+    #             return map(lambda x: reduce(operator.or_,
+    #                                         map(lambda y: Q(**{f"{x}__{y}": filt_val_bool}),
+    #                                             filter_key_list_iter)),
+    #                        card_col_name_list)
+    #         return reduce(operator.and_, make_ored_color_filter_list())
+    #
+    #     def make_included_color_filter_list(card_count_key, included_color_list):
+    #         if included_color_list is not None and len(included_color_list) > 0:
+    #             filter_key_list_iter = list(map(filt_key, included_color_list))
+    #             return make_color_filter_map(card_count_key, filter_key_list_iter, True)
+    #         else:
+    #             return []
+    #
+    #     def make_excluded_color_filter_list(card_count_key, excluded_color_list):
+    #         if excluded_color_list is not None and len(excluded_color_list) > 0:
+    #             filter_key_list_iter = list(map(filt_key, excluded_color_list))
+    #             return make_color_filter_map(card_count_key, filter_key_list_iter, False)
+    #         else:
+    #             return []
+    #
+    #     def make_full_color_filter_list(card_count, included_color_list, excluded_color_list):
+    #         full_list = []
+    #         inc = make_included_color_filter_list(card_count, included_color_list)
+    #         exc = make_excluded_color_filter_list(card_count, excluded_color_list)
+    #         if len(inc) > 0:
+    #             full_list.append(inc)
+    #         if len(exc) > 0:
+    #             full_list.append(exc)
+    #         return full_list
+    #
+    #     z = make_full_color_filter_list('2', color_include_str, color_exclude_str)
+    #     print(z)
+    #
+    #     return dict(map(lambda x:
+    #                     (x,
+    #                      base_query_dict[x].filter(
+    #                          *make_full_color_filter_list(
+    #                              x, color_include_str, color_exclude_str
+    #                          )
+    #                      )
+    #                      ),
+    #                      base_query_dict.keys()))
